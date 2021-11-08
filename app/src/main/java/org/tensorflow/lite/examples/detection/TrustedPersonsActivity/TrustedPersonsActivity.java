@@ -36,12 +36,14 @@ public class TrustedPersonsActivity extends AppCompatActivity implements Trusted
 
         preferences = getSharedPreferences(MAIN_SHARED_PREFERENCES, Context.MODE_PRIVATE);
         String names = preferences.getString("names", null);
+        String phones = preferences.getString("phones", null);
         if(names != null){
             String [] namesArray = names.split(",");
+            String [] phonesArray = phones.split(",");
             List<TrustedPerson> persons = new ArrayList<>();
             for (int i = 0; i < namesArray.length; i++) {
                 if(!namesArray[i].isEmpty()) {
-                    persons.add(new TrustedPerson(namesArray[i], "" + i));
+                    persons.add(new TrustedPerson(namesArray[i], phonesArray[i]));
                 }
             }
             adapter = new TrustedPersonsAdapter(persons, this);

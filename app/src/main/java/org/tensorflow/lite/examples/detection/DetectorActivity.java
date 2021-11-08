@@ -20,6 +20,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
 import android.graphics.Canvas;
@@ -31,8 +32,11 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.hardware.camera2.CameraCharacteristics;
 import android.media.ImageReader.OnImageAvailableListener;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.util.DisplayMetrics;
 import android.util.Size;
 import android.util.TypedValue;
@@ -52,6 +56,7 @@ import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -133,14 +138,28 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private Bitmap faceBmp = null;
 
   private FloatingActionButton fabAdd, fabShowTrustedPersons;
+  private ImageView fingerprint;
 
   //private HashMap<String, Classifier.Recognition> knownFaces = new HashMap<>();
 
+  private List<String> personsNames;
 
+  private long firstTimeToFindStrangePerson = 0;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    personsNames = new ArrayList<>();
+    SharedPreferences preferences = getSharedPreferences(MAIN_SHARED_PREFERENCES, Context.MODE_PRIVATE);
+    String names = preferences.getString("names", null);
+    if(names != null){
+      String[] namesArray = names.split(",");
+      for (int i = 0; i < namesArray.length; i++) {
+        if(!namesArray[i].isEmpty()){
+          personsNames.add(namesArray[i]);
+        }
+      }
+    }
 
     fabAdd = findViewById(R.id.fab_add);
     fabShowTrustedPersons = findViewById(R.id.fab_show_trusted_persons);
@@ -151,6 +170,8 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     });
 
     fabAdd.setOnClickListener(view -> onAddClick());
+
+    fingerprint = findViewById(R.id.fingerprint);
 
     // Real-time contour detection of multiple faces
     FaceDetectorOptions options =
@@ -410,20 +431,36 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     ImageView ivFace = dialogLayout.findViewById(R.id.dlg_image);
     TextView tvTitle = dialogLayout.findViewById(R.id.dlg_title);
     EditText etName = dialogLayout.findViewById(R.id.dlg_input);
-    tvTitle.setText("Add Face");
+    EditText etPhone = dialogLayout.findViewById(R.id.dlg_input2);
+    tvTitle.setText("Add Person");
     ivFace.setImageBitmap(rec.getCrop());
     etName.setHint("Input name");
-
+    etPhone.setHint("Input number");
     builder.setPositiveButton("OK", new DialogInterface.OnClickListener(){
       @Override
       public void onClick(DialogInterface dlg, int i) {
 
           String name = etName.getText().toString();
-          if (name.isEmpty()) {
+          String phone = etPhone.getText().toString();
+          if (name.isEmpty() || phone.isEmpty()) {
+            Toast.makeText(getApplicationContext(), "Fill all inputs", Toast.LENGTH_SHORT).show();
               return;
           }
           //TODO: DONE - Make this register function permanently saved in the device
-          detector.register(name, rec);
+          detector.register(name, phone, rec);
+          String names = getSharedPreferences(MAIN_SHARED_PREFERENCES,MODE_PRIVATE)
+                  .getString("names",null);
+          if(names != null){
+            String [] namesArray = names.split(",");
+            personsNames.clear();
+            System.out.println("names size : " + namesArray.length);
+            for (int j = 0; j < namesArray.length; j++) {
+              if(!namesArray[j].isEmpty()){
+                personsNames.add(namesArray[j]);
+              }
+            }
+          }
+
           //knownFaces.put(name, rec);
           dlg.dismiss();
       }
@@ -566,15 +603,21 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
           float conf = result.getDistance();
           if (conf < 1.0f) {
-
             confidence = conf;
             label = result.getTitle();
             if (result.getId().equals("0")) {
               color = Color.GREEN;
-            }
-            else {
+            } else {
               color = Color.RED;
             }
+          }
+
+          if(!personsNames.contains(result.getTitle())){
+            long millis = SystemClock.uptimeMillis();
+            if(firstTimeToFindStrangePerson == 0) {
+              firstTimeToFindStrangePerson = millis;
+            }
+            onStrangePersonDetected(millis);
           }
 
         }
@@ -606,16 +649,31 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
       }
 
-
     }
-
     //    if (saved) {
 //      lastSaved = System.currentTimeMillis();
 //    }
-
     updateResults(currTimestamp, mappedRecognitions);
 
+  }
 
+  private void onStrangePersonDetected(long detectionTimeInMillis) {
+    //TODO: choose what happen when detecting strange person
+    long elapsedTime = detectionTimeInMillis - firstTimeToFindStrangePerson;
+    System.out.println("elapsed time is : " + elapsedTime);
+    if(elapsedTime >= 10000){
+      runOnUiThread(() -> {
+        fingerprint.setVisibility(View.VISIBLE);
+      });
+      Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+      // Vibrate for 500 milliseconds
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        v.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE));
+      } else {
+        //deprecated in API 26
+        v.vibrate(100);
+      }
+    }
   }
 
 

@@ -122,15 +122,18 @@ public class TFLiteObjectDetectionAPIModel
     editor.commit();
   }
 
-  public void register(String name, Recognition rec) {
+  public void register(String name, String phone, Recognition rec) {
     String names = preferences.getString("names" , null);
-    if(names != null){
+    String phones = preferences.getString("phones" , null);
+    if(names != null && phones != null){
       names += "," + name;
+      phones += "," + phones;
     }else{
-      names = name;
+      phones = phone;
     }
     final SharedPreferences.Editor editor = preferences.edit();
     editor.putString("names", names);
+    editor.putString("phones", phones);
     editor.apply();
     editor.commit();
 
